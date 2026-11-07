@@ -50,31 +50,44 @@ payload.extend(b"\x1b\x61\x00")
 payload.extend(escpos_text(f'Receipt: {data["orderNo"]}\n'))
 payload.extend(b"-" * 32 + b"\n")
 
-# Items: bold, double-width names; normal-size prices
+
+
+
+# Items: double-width names, prices right-aligned
 for item in data["items"]:
     name = str(item["name"])
     price = Decimal(str(item["price"]))
     price_text = f"{price:.2f}"
 
-    # Reserve room for the normal-size price and a gap.
-    # Double-width names use approximately two columns per character.
-    name_width = max(1, (32 - len(price_text) - 1) // 2)
-    name_text = name[:name_width]
-
-    # Print item name: bold, double-width, normal-height
-    payload.extend(b"\x1b\x45\x01")  # Bold ON
+    # Print item name in double-width
+    payload.extend(b"\x1b\x61\x00")  # Left alignment
     payload.extend(b"\x1d\x21\x01")  # Double width
-    payload.extend(escpos_text(name_text))
+    payload.extend(escpos_text(name))
 
-    # Print price: normal-size, normal-weight, same line
+    # Return to normal-size text
     payload.extend(b"\x1d\x21\x00")
-    payload.extend(b"\x1b\x45\x00")
 
-    spaces = max(1, 32 - (len(name_text) * 2) - len(price_text))
-    payload.extend(b" " * spaces)
-    payload.extend(escpos_text(price_text + "\n"))
+    # Calculate price position so its RIGHT edge stays fixed
+    right_edge = 540  # Dots from the left; reduce if it wraps
+    char_width = 12   # Approximate normal font width in dots
+    position = right_edge - (len(price_text) * char_width)
 
-payload.extend(b"-" * 32 + b"\n")
+    payload.extend(
+        b"\x1b\x24" +
+        bytes([position & 0xFF, (position >> 8) & 0xFF])
+    )
+    payload.extend(escpos_text(price_text))
+    payload.extend(b"\n")
+
+    # Reset horizontal position and add a small gap
+    payload.extend(b"\x1b\x24\x00\x00")
+    payload.extend(b"\x1b\x4a\x06")
+    # Reset horizontal position and add a small gap
+    payload.extend(b"\x1b\x24\x00\x00")
+    payload.extend(b"\x1b\x4a\x06")
+
+    # Small gap before next item
+#    payload.extend(b"\x1b\x4a\x06")  # Feed 6 dots
 
 # Total: centred, bold, double-size
 total = Decimal(str(data["total"]))

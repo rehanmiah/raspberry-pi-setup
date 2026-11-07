@@ -23,7 +23,7 @@ import subprocess
 from decimal import Decimal
 
 PRINTER = "POS80"
-JSON_FILE = "test.json"
+JSON_FILE = "test2.json"
 
 
 def escpos_text(text):
@@ -53,24 +53,29 @@ payload.extend(b"-" * 32 + b"\n")
 
 
 
-# Items: double-width names, prices right-aligned
+# Items: double-width names, inline descriptions and right-aligned prices
 for item in data["items"]:
     name = str(item["name"])
     price = Decimal(str(item["price"]))
     price_text = f"{price:.2f}"
+    description = str(item.get("description", "")).strip()
 
-    # Print item name in double-width
-    payload.extend(b"\x1b\x61\x00")  # Left alignment
-    payload.extend(b"\x1d\x21\x01")  # Double width
+    # Left alignment
+    payload.extend(b"\x1b\x61\x00")
+
+    # Item name: double-width
+    payload.extend(b"\x1d\x21\x01")
     payload.extend(escpos_text(name))
 
-    # Return to normal-size text
+    # Description: normal-size text
     payload.extend(b"\x1d\x21\x00")
+    if description:
+        payload.extend(escpos_text(" " + description))
 
-    # Calculate price position so its RIGHT edge stays fixed
-    right_edge = 540  # Dots from the left; reduce if it wraps
-    char_width = 12   # Approximate normal font width in dots
-    position = right_edge - (len(price_text) * char_width)
+    # Price: normal-size text, right-aligned
+    right_edge = 540
+    char_width = 12
+    position = right_edge - len(price_text) * char_width
 
     payload.extend(
         b"\x1b\x24" +
@@ -82,21 +87,23 @@ for item in data["items"]:
     # Reset horizontal position and add a small gap
     payload.extend(b"\x1b\x24\x00\x00")
     payload.extend(b"\x1b\x4a\x06")
-    # Reset horizontal position and add a small gap
-    payload.extend(b"\x1b\x24\x00\x00")
-    payload.extend(b"\x1b\x4a\x06")
-
-    # Small gap before next item
-#    payload.extend(b"\x1b\x4a\x06")  # Feed 6 dots
-
-# Total: centred, bold, double-size
+# Total: right-aligned to the same edge as item prices
 total = Decimal(str(data["total"]))
-payload.extend(b"\x1b\x61\x01")
-payload.extend(b"\x1b\x45\x01")
-payload.extend(b"\x1d\x21\x11")
-payload.extend(escpos_text(f"TOTAL: {total:.2f}"))
-payload.extend(b"\n")
+total_text = f"TOTAL: {total:.2f}"
 
+right_edge = 540
+char_width = 12
+position = right_edge - (len(total_text) * char_width)
+
+
+payload.extend(b"\x1d\x21\x01")  # Normal size
+payload.extend(b"\x1b\x45\x01")  # Bold ON
+payload.extend(
+    b"\x1b\x24" +
+    bytes([position & 0xFF, (position >> 8) & 0xFF])
+)
+payload.extend(escpos_text(total_text))
+payload.extend(b"\n")
 # Restore normal formatting, feed paper, and cut once
 payload.extend(b"\x1d\x21\x00")
 payload.extend(b"\x1b\x45\x00")
@@ -111,7 +118,69 @@ subprocess.run(
 )
 
 print("Receipt submitted successfully.")
-rehan@le-raj:~/pos80 $
+
+
+```
+
+
+
+
+
+
+
+
+
+
+```
+
+
+
+cat test2.json
+{
+  "place": "The Palace",
+  "orderNo": 1001,
+  "items": [
+    {
+      "name": "Pillar Rice",
+      "price": 17.50,
+      "description": "hot"
+    },
+    {
+      "name": "Nan",
+      "price": 16.00
+    },
+    {
+      "name": "Garlic Naan",
+      "price": 105.50,
+      "description": "Extra hot"
+    },
+    {
+      "name": "Chocolate",
+      "price": 13.40,
+      "description": "sweet sour"
+    },
+    {
+      "name": "Tea",
+      "price": 2.99
+    },
+    {
+      "name": "Chi Dhansak",
+      "price": 7.00,
+      "description": "hot"
+    },
+    {
+      "name": "Chicken Kurma",
+      "description": "less spicy last time to hot",
+      "price": 13.50
+    },
+    {
+      "name": "Chicken Tikka Masala",
+      "price": 2.95
+    }
+  ],
+  "total": 125.50
+}
+
 
 
 ```
